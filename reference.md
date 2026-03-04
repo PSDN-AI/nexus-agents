@@ -10,7 +10,9 @@ Curated external resources relevant to AI agent engineering and operations.
 
 ## Agent Architecture
 
-_No entries yet._
+| Resource | Summary |
+|----------|---------|
+| [How I built an Autonomous AI Agent team that runs 24/7](https://x.com/Saboo_Shubham_/status/2022014147450614038) | Shubham Saboo's multi-agent coordination case study — 6 specialized agents collaborate via filesystem, automating a content operations pipeline (research → draft → publish → review → triage), demonstrating single-responsibility agents with pipeline orchestration in practice. |
 
 ## Context Engineering
 
