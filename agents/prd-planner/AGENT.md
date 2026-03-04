@@ -2,7 +2,7 @@
 name: prd-planner
 description: "Orchestrates end-to-end PRD decomposition and task planning by chaining prd-decompose and spec-plan skills. Takes a raw PRD and produces domain-specific task graphs ready for implementation."
 license: MIT
-compatibility: "Requires prd-decompose 0.1.0+ and spec-plan 0.1.0+ skills from nexus-skills."
+compatibility: "Requires prd-decompose 0.1.0 and spec-plan 0.1.0, each resolved through the `ref` declared in config.yaml."
 metadata:
   author: PSDN-AI
   version: "0.1.0"
@@ -100,23 +100,25 @@ PRD (markdown)
 
 ### Step 1: RECEIVE
 
-- [ ] Accept PRD input (file path or inline markdown)
-- [ ] Verify the PRD is non-empty and contains readable content
-- [ ] Identify or create the output directory (`prd-output/`)
+- [ ] Accept exactly one PRD input source: `prd_path` or `prd_markdown`
+- [ ] If `prd_path` is used, verify the file exists and is readable
+- [ ] If `prd_markdown` is used, verify the inline content is non-empty
+- [ ] Resolve the output directory path (`prd-output/` by default), but do not create it yet
 
-**Gate**: If PRD is empty or unreadable, STOP with error.
+**Gate**: If neither input is provided, both are provided, or the chosen input is empty/unreadable, STOP with error.
 
 ### Step 2: RESOLVE
 
-- [ ] Read `config.yaml` to get skill sources and versions
-- [ ] Fetch `SKILL.md` for `prd-decompose` from configured source
-- [ ] Fetch `SKILL.md` for `spec-plan` from configured source
+- [ ] Read `config.yaml` to get skill sources, versions, and refs
+- [ ] Fetch `SKILL.md` for `prd-decompose` from the configured `source` at the configured `ref`
+- [ ] Fetch `SKILL.md` for `spec-plan` from the configured `source` at the configured `ref`
 - [ ] Confirm both skill definitions are accessible
 
-**Gate**: If either SKILL.md is missing or inaccessible, STOP with error.
+**Gate**: If either SKILL.md is missing, inaccessible, or lacks a `ref` in `config.yaml`, STOP with error.
 
 ### Step 3: DECOMPOSE
 
+- [ ] Create the output directory after Step 1 and Step 2 have passed
 - [ ] Invoke `prd-decompose` with the PRD input
 - [ ] Pass the output directory as the target
 - [ ] Wait for completion
@@ -150,7 +152,8 @@ prd-output/
 - [ ] List all subdirectories in the output root
 - [ ] Skip `contracts/` — contains shared contract definitions, not a plannable domain
 - [ ] Skip `uncategorized/` — contains unclassified requirements, not plannable
-- [ ] For each remaining domain folder:
+- [ ] Build `plannable_domains` from all remaining domain folders
+- [ ] For each domain in `plannable_domains`:
   - [ ] Pass the domain folder path to `spec-plan`
   - [ ] `spec-plan` reads `spec.md`, `boundary.yaml`, and `config.yaml` from that folder
   - [ ] `spec-plan` produces `tasks.yaml` inside the same domain folder
@@ -163,13 +166,16 @@ prd-output/
 - [ ] For each domain folder that was planned:
   - [ ] Verify `tasks.yaml` exists
   - [ ] Verify `tasks.yaml` has valid YAML structure
-  - [ ] Verify task coverage: every requirement in `spec.md` maps to at least one task
-  - [ ] Check for cross-domain conflicts using `boundary.yaml` constraints
-- [ ] Record which domains succeeded and which failed
+  - [ ] If `spec-plan` publishes a machine-readable schema, verify the required top-level fields
+  - [ ] If no published schema exists, mark the domain as structurally unverified and continue
+  - [ ] Record task counts only when the `tasks.yaml` schema exposes a machine-readable task list
+- [ ] Record which domains succeeded, failed, or remain structurally unverified
+
+**Boundary**: Limit validation to file existence, YAML parsing, and published schema checks. Do not infer requirement-to-task coverage or cross-domain conflicts unless a dedicated validation skill is added to `config.yaml`.
 
 ### Step 7: REPORT
 
-- [ ] Count: total domains, planned domains, failed domains, skipped domains
+- [ ] Count: total plannable domains, planned domains, failed domains, skipped entries, unverified domains
 - [ ] List any domains that failed planning with error details
 - [ ] Summarize total tasks generated across all domains
 - [ ] Output the final directory structure
@@ -180,8 +186,11 @@ prd-output/
 
 | Field | Type   | Required | Description                    |
 |-------|--------|----------|--------------------------------|
-| prd   | string | yes      | Path to PRD markdown file      |
+| prd_path | string | conditional | Path to the PRD markdown file |
+| prd_markdown | string | conditional | Inline PRD markdown content |
 | out   | string | no       | Output directory (default: `prd-output/`) |
+
+Exactly one of `prd_path` or `prd_markdown` must be provided.
 
 ### Output
 
@@ -202,29 +211,30 @@ prd-output/
 
 The agent produces a final summary with:
 
-- `total_domains`: number of domain folders discovered
+- `total_domains`: number of plannable domain folders discovered (excludes `contracts/` and `uncategorized/`)
 - `planned_domains`: number that received a `tasks.yaml`
 - `failed_domains`: number where `spec-plan` errored
-- `skipped_domains`: number intentionally skipped (`contracts/`, `uncategorized/`)
+- `skipped_entries`: number intentionally skipped (`contracts/`, `uncategorized/`)
+- `unverified_domains`: number that produced `tasks.yaml` but could not be fully validated against a published schema
 - `total_tasks`: aggregate task count across all `tasks.yaml` files
 
 ## Constitutional Constraints
 
 1. **Read-only PRD**: Never modify the input PRD. All output goes to the output directory.
-2. **Skill boundary**: Only invoke skills listed in `config.yaml`. Do not inline skill logic.
+2. **Skill boundary**: Only invoke skills listed in `config.yaml`. Non-skill checks are limited to file existence, syntax parsing, and published schema validation.
 3. **Fail-safe iteration**: If `spec-plan` fails for one domain, log and continue. Never abort the entire pipeline for a single domain failure.
 4. **No fabrication**: Do not generate task content outside of `spec-plan`. The agent orchestrates; it does not author tasks.
-5. **Deterministic output**: Given the same PRD and skill versions, the output structure must be identical.
+5. **Deterministic output**: Given the same PRD bytes and the same resolved skill refs, the output structure should be identical. This guarantee is strongest when `ref` points to an immutable tag or commit SHA.
 
 ## Error Handling
 
 ### Gate 1: Input Validation (Step 1)
 
-Triggers when the PRD file is missing, empty, or not valid markdown. The agent stops immediately and reports the input error. No output directory is created.
+Triggers when neither input source is provided, both are provided, the PRD file is missing/unreadable, or the inline markdown is empty. The agent stops immediately and reports the input error. No output directory is created.
 
 ### Gate 2: Skill Resolution (Step 2)
 
-Triggers when `config.yaml` is missing or a referenced SKILL.md cannot be fetched. The agent stops before any decomposition. Reports which skill failed to resolve.
+Triggers when `config.yaml` is missing, a referenced `ref` is missing, or a referenced SKILL.md cannot be fetched at the configured ref. The agent stops before any decomposition. Reports which skill failed to resolve.
 
 ### Gate 3: Decomposition Validation (Step 4)
 
@@ -239,3 +249,5 @@ Note: There is no gate at the planning step (Step 5). Individual domain failures
 - **Assuming all domains will succeed**: Some domains may have incomplete specs or boundary conflicts that cause `spec-plan` to fail. Always handle partial success.
 - **Ignoring coverage_percent**: A `coverage_percent` of 0 in `meta.yaml` means decomposition produced no meaningful output. Do not proceed to planning.
 - **Modifying skill behavior inline**: The agent must invoke skills as-is. Customizing or overriding skill logic within the agent violates the skill boundary constraint.
+- **Creating the output directory before input validation**: Resolve the output path first, but only create it after the input and skill gates pass.
+- **Inventing semantic validation rules**: Requirement-to-task coverage and cross-domain conflict checks require a dedicated validation skill or published schema contract.
