@@ -1,0 +1,9 @@
+skills:
+  - name: prd-decompose
+    version: "0.1.0"
+    source: https://github.com/PSDN-AI/nexus-skills
+    path: skills/prd-decompose
+  - name: spec-plan
+    version: "0.1.0"
+    source: https://github.com/PSDN-AI/nexus-skills
+    path: skills/spec-plan
