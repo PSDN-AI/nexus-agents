@@ -4,8 +4,9 @@ Orchestration agents for the PSDN-AI nexus ecosystem. Each agent chains multiple
 
 ## How Agents Work
 
-An agent is a **knowledge-only** package that defines:
+This repository defines a shared `AGENTS.md` contract plus per-agent **knowledge-only** packages that define:
 
+- **`AGENTS.md`** — repo-level best practices and shared invariants for all agents.
 - **`README.md`** — human-facing usage and invocation guide.
 - **`AGENT.md`** — orchestration instructions: pipeline steps, input/output contracts, constraints, and error handling.
 - **`config.yaml`** — declares which skills the agent depends on, with version metadata, refs, and source locations.
@@ -36,10 +37,11 @@ Skills are standalone, single-purpose units. Agents compose skills into multi-st
 
 ## Adding a New Agent
 
-1. Create `agents/{agent-name}/README.md` with human-facing usage and invocation instructions
-2. Create `agents/{agent-name}/AGENT.md` with YAML frontmatter (name, description, license, metadata)
-3. Create `agents/{agent-name}/config.yaml` listing skill dependencies, including a `ref` for each skill (prefer immutable refs for releases)
-4. Add the agent to the table above
+1. Read `AGENTS.md` and follow the shared authoring conventions
+2. Create `agents/{agent-name}/README.md` with human-facing usage and invocation instructions
+3. Create `agents/{agent-name}/AGENT.md` with YAML frontmatter (name, description, license, metadata)
+4. Create `agents/{agent-name}/config.yaml` listing skill dependencies, including a `ref` for each skill (prefer immutable refs for releases)
+5. Add the agent to the table above
 
 ## License
 

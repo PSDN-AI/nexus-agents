@@ -28,6 +28,8 @@ Optional:
 
 - `out`: output directory, defaults to `prd-output/`
 
+`out` must point to a new directory path or an already-empty directory. Do not reuse a non-empty directory from a previous run.
+
 ## Outputs
 
 The agent writes a structured directory like:
@@ -45,6 +47,8 @@ prd-output/
        |- spec.md
 ```
 
+It also produces a machine-readable final summary with stable top-level fields such as `status`, `total_domains`, `planned_domains`, `failed_domains`, `unverified_domains`, `tainted_domains`, `total_tasks`, and per-domain detail arrays. Its `reason` fields use fixed enums, so downstream consumers should branch on those codes instead of parsing free-form prose.
+
 ## Calling It From Claude Code
 
 There is no built-in slash command for this repository today. In Claude Code, the practical way to run this agent is to explicitly tell Claude to use this agent's files as the contract.
@@ -60,6 +64,7 @@ If you have `nexus-skills` checked out locally next to this repo, use a prompt l
 Use the `prd-planner` agent in `agents/prd-planner/`.
 
 Read:
+- `AGENTS.md`
 - `agents/prd-planner/README.md`
 - `agents/prd-planner/AGENT.md`
 - `agents/prd-planner/config.yaml`
@@ -79,6 +84,7 @@ Use a prompt like this when your PRD already exists on disk:
 Use the `prd-planner` agent in `agents/prd-planner/`.
 
 Read:
+- `AGENTS.md`
 - `agents/prd-planner/README.md`
 - `agents/prd-planner/AGENT.md`
 - `agents/prd-planner/config.yaml`
@@ -96,6 +102,7 @@ Use a prompt like this when you want to paste the PRD inline:
 Use the `prd-planner` agent in `agents/prd-planner/`.
 
 Read:
+- `AGENTS.md`
 - `agents/prd-planner/README.md`
 - `agents/prd-planner/AGENT.md`
 - `agents/prd-planner/config.yaml`
@@ -111,7 +118,7 @@ Follow the agent contract exactly. Do not skip validation gates. Produce the fin
 
 1. Open the repository that contains both `nexus-agents` and the target PRD.
 2. Make sure Claude can also access `nexus-skills`, either through a local checkout or through the remote repo.
-3. Ask Claude to read this agent's `README.md`, `AGENT.md`, and `config.yaml`.
+3. Ask Claude to read `AGENTS.md` first, then this agent's `README.md`, `AGENT.md`, and `config.yaml`.
 4. Provide either `prd_path` or `prd_markdown`.
 5. Let Claude execute the steps defined in `AGENT.md`.
 6. Review the generated `prd-output/` structure and the final summary.
@@ -122,6 +129,8 @@ Follow the agent contract exactly. Do not skip validation gates. Produce the fin
 - For release or reproducible CI runs, switch `ref` to an immutable tag or commit SHA.
 - `contracts/` and `uncategorized/` are intentionally skipped during the planning loop.
 - If the final summary reports `unverified_domains > 0`, treat the run as partial success and review those domains manually.
+- If the final summary reports `tainted_domains > 0`, treat the run as a partial failure. Any `tasks.yaml` in those domains is not safe for downstream consumption.
+- Prefer consuming the structured summary fields directly. Human-readable recap text, if present, is secondary.
 
 ## When Not To Use This
 
