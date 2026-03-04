@@ -156,6 +156,7 @@ prd-output/
 - [ ] For each domain in `plannable_domains`:
   - [ ] Pass the domain folder path to `spec-plan`
   - [ ] `spec-plan` reads `spec.md`, `boundary.yaml`, and `config.yaml` from that folder
+  - [ ] Invoke `spec-plan` using its normal planning flow, including its own built-in validation phase before output is finalized
   - [ ] `spec-plan` produces `tasks.yaml` inside the same domain folder
   - [ ] If `spec-plan` fails for a domain, log the error and continue to next domain
 
@@ -179,6 +180,8 @@ prd-output/
 - [ ] List any domains that failed planning with error details
 - [ ] Summarize total tasks generated across all domains
 - [ ] Output the final directory structure
+
+**Result classification**: If `failed_domains` is greater than 0, the run is a partial failure. If `failed_domains` is 0 but `unverified_domains` is greater than 0, the run is a partial success and requires manual review before downstream execution.
 
 ## Input / Output Contract
 
@@ -217,6 +220,8 @@ The agent produces a final summary with:
 - `skipped_entries`: number intentionally skipped (`contracts/`, `uncategorized/`)
 - `unverified_domains`: number that produced `tasks.yaml` but could not be fully validated against a published schema
 - `total_tasks`: aggregate task count across all `tasks.yaml` files
+
+If `unverified_domains` is greater than 0, the result must be treated as partial success rather than a fully verified successful run.
 
 ## Constitutional Constraints
 
