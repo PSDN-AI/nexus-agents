@@ -1,12 +1,12 @@
-# Pinned to the current `nexus-skills/main` commit; prefer immutable tags or commit SHAs for shared configs.
+# Tracking `nexus-skills/main` during active development; prefer immutable tags or commit SHAs for releases.
 skills:
   - name: prd-decompose
     version: "0.1.0"
-    ref: "de387a9afa3b19f8b3c2b2f3615217b78a026857"
+    ref: "main"
     source: https://github.com/PSDN-AI/nexus-skills
     path: skills/prd-decompose
   - name: spec-plan
     version: "0.1.0"
-    ref: "de387a9afa3b19f8b3c2b2f3615217b78a026857"
+    ref: "main"
     source: https://github.com/PSDN-AI/nexus-skills
     path: skills/spec-plan
