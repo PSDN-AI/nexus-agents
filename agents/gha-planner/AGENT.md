@@ -258,7 +258,7 @@ The agent must produce a final machine-readable summary object with these top-le
 
 - `status`: one of `success`, `partial_success`, `partial_failure`, `error`
 - `total_workflows`: number of workflows planned
-- `generated_workflows`: number of workflows successfully generated
+- `generated_workflows`: number of workflows where a file was written to disk (includes `validated`, `advisory_only`, `invalid`, and `failed`; excludes `generation_failed`)
 - `passed_workflows`: number of workflows that passed all required validation checks (includes `validated` and `advisory_only`)
 - `failed_workflows`: number of workflows that failed generation or required validation
 - `advisory_warnings`: total advisory warning count across all workflows
@@ -383,6 +383,7 @@ General invariants:
 - `total_workflows` must equal the length of `workflow_results`
 - `passed_workflows` must equal the count of `workflow_results` items with `status: validated` plus items with `status: advisory_only`
 - `failed_workflows` must equal the count of items with `status: failed` plus items with `status: invalid` plus items with `status: generation_failed`
+- `generated_workflows` must equal `total_workflows` minus the count of items with `status: generation_failed`
 - `passed_workflows + failed_workflows` must equal `total_workflows`
 - If `status: error`, `workflow_results` must be empty and all workflow count fields must be `0`
 
@@ -494,10 +495,10 @@ Gate-level `error_reason` values:
 
 Mapping rules:
 
-- If gha-create itself errors during generation, use `gha_create_error` and set workflow status to `generation_failed`
-- If generation completes but the output file is empty, use `empty_workflow_output` and set workflow status to `invalid`
-- If the generated file is not valid YAML, use `invalid_workflow_yaml` and set workflow status to `invalid`
-- If the file is valid YAML but fails required validation checks, use `validation_check_failed` and set workflow status to `failed`
+- If gha-create itself errors during generation, use reason `gha_create_error`, stage `generate`, workflow status `generation_failed`
+- If generation completes but the output file is empty, use reason `empty_workflow_output`, stage `validate`, workflow status `invalid`
+- If the generated file is not valid YAML, use reason `invalid_workflow_yaml`, stage `validate`, workflow status `invalid`
+- If the file is valid YAML but fails required validation checks, use reason `validation_check_failed`, stage `validate`, workflow status `failed`
 
 ## Common Pitfalls
 
