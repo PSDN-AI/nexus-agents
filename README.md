@@ -17,8 +17,8 @@ Agent packages themselves do not contain executable code. They are consumed by a
 
 | Agent | Description | Skills Used |
 |-------|-------------|-------------|
-| <nobr>[prd-planner](agents/prd-planner/)</nobr> | Decomposes a PRD into domain specs, then generates task graphs per domain | `prd-decompose`, `spec-plan` |
-| <nobr>[gha-planner](agents/gha-planner/)</nobr> | Scans a repo's tech stack and generates hardened GitHub Actions workflows | `gha-create` |
+| [prd‑planner](agents/prd-planner/) | Decomposes a PRD into domain specs, then generates task graphs per domain | `prd‑decompose`, `spec‑plan` |
+| [gha‑planner](agents/gha-planner/) | Scans a repo's tech stack and generates hardened GitHub Actions workflows | `gha‑create` |
 
 ## Cross-Repo Relationship
 
