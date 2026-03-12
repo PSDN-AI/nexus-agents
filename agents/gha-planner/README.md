@@ -40,17 +40,17 @@ gha-output/
   |- plan.yaml
   |- workflows/
   |    |- ci.yml
-  |    |- deploy.yml
+  |    |- cd.yml
   |    |- docker-build.yml
   |    |- security.yml
   |- validation/
        |- ci.yml.result
-       |- deploy.yml.result
+       |- cd.yml.result
        |- docker-build.yml.result
        |- security.yml.result
 ```
 
-It also produces a machine-readable final summary with stable top-level fields such as `status`, `total_workflows`, `generated_workflows`, `validated_workflows`, `failed_workflows`, `advisory_warnings`, and per-workflow detail arrays. Its `reason` fields use fixed enums, so downstream consumers should branch on those codes instead of parsing free-form prose.
+It also produces a machine-readable final summary with stable top-level fields such as `status`, `total_workflows`, `generated_workflows`, `passed_workflows`, `failed_workflows`, `advisory_warnings`, and per-workflow detail arrays. Its `reason` fields use fixed enums, so downstream consumers should branch on those codes instead of parsing free-form prose.
 
 ## Calling It From Claude Code
 

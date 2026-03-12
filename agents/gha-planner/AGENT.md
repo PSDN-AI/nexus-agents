@@ -173,7 +173,7 @@ Target Repo path
 
 - [ ] For each planned workflow, record:
   - `workflow_id`: short identifier (e.g., `ci`, `cd`, `docker-build`, `release`, `security`)
-  - `workflow_filename`: target filename (e.g., `ci.yml`, `deploy.yml`)
+  - `workflow_filename`: target filename (e.g., `ci.yml`, `cd.yml`)
   - `description`: human-readable purpose
   - `triggers`: which events and paths should trigger it
   - `tech_context`: relevant tech stack details to pass to gha-create
@@ -216,7 +216,7 @@ Target Repo path
 
 ### Step 7: REPORT
 
-- [ ] Count: total planned workflows, generated workflows, validated workflows, failed workflows
+- [ ] Count: total planned workflows, generated workflows, passed workflows, failed workflows
 - [ ] Build a machine-readable final summary using the field names and ordering defined in `Summary Output`
 - [ ] List any workflows that failed generation or validation with error details
 - [ ] List advisory warnings per workflow
@@ -242,12 +242,12 @@ gha-output/
   |- plan.yaml                    # Workflow generation plan
   |- workflows/
   |    |- ci.yml                  # Generated workflow (example)
-  |    |- deploy.yml              # Generated workflow (example)
+  |    |- cd.yml                  # Generated workflow (example)
   |    |- docker-build.yml        # Generated workflow (example)
   |    |- security.yml            # Generated workflow (example)
   |- validation/
        |- ci.yml.result           # Per-workflow validation result
-       |- deploy.yml.result
+       |- cd.yml.result
        |- docker-build.yml.result
        |- security.yml.result
 ```
@@ -259,7 +259,7 @@ The agent must produce a final machine-readable summary object with these top-le
 - `status`: one of `success`, `partial_success`, `partial_failure`, `error`
 - `total_workflows`: number of workflows planned
 - `generated_workflows`: number of workflows successfully generated
-- `validated_workflows`: number of workflows that passed all required validation checks
+- `passed_workflows`: number of workflows that passed all required validation checks (includes `validated` and `advisory_only`)
 - `failed_workflows`: number of workflows that failed generation or required validation
 - `advisory_warnings`: total advisory warning count across all workflows
 - `output_root`: resolved output directory path
@@ -290,7 +290,7 @@ Each item in `workflow_results` must contain:
 
 - `workflow_id`: short identifier (e.g., `ci`, `cd`, `docker-build`)
 - `workflow_filename`: output filename
-- `status`: one of `validated`, `advisory_only`, `failed`, `generation_failed`
+- `status`: one of `validated`, `advisory_only`, `invalid`, `failed`, `generation_failed`
 - `description`: what the workflow does
 - `output_path`: path to the generated file, or `null` if generation failed
 - `validation_passed`: number of required checks passed
@@ -313,7 +313,7 @@ Illustrative shape:
 status: partial_failure
 total_workflows: 4
 generated_workflows: 4
-validated_workflows: 3
+passed_workflows: 3
 failed_workflows: 1
 advisory_warnings: 2
 output_root: gha-output
@@ -328,24 +328,24 @@ error_stage: null
 error_reason: null
 error_message: null
 workflow_results:
+  - workflow_id: cd
+    workflow_filename: cd.yml
+    status: failed
+    description: "Deploy to Vercel"
+    output_path: gha-output/workflows/cd.yml
+    validation_passed: 3
+    validation_failed: 2
+    advisory_count: 0
+    notes: "S1 and E3 required checks failed"
   - workflow_id: ci
     workflow_filename: ci.yml
-    status: validated
+    status: advisory_only
     description: "Lint, test, and build for TypeScript and Python"
     output_path: gha-output/workflows/ci.yml
     validation_passed: 5
     validation_failed: 0
     advisory_count: 1
     notes: "All required checks passed; E1 advisory"
-  - workflow_id: deploy
-    workflow_filename: deploy.yml
-    status: failed
-    description: "Deploy to Vercel"
-    output_path: gha-output/workflows/deploy.yml
-    validation_passed: 3
-    validation_failed: 2
-    advisory_count: 0
-    notes: "S1 and E3 required checks failed"
   - workflow_id: docker-build
     workflow_filename: docker-build.yml
     status: validated
@@ -365,7 +365,7 @@ workflow_results:
     advisory_count: 1
     notes: "All required checks passed; E4 advisory"
 failed_workflow_details:
-  - workflow_id: deploy
+  - workflow_id: cd
     stage: validate
     reason: validation_check_failed
     message: "S1 SHA pinning and E3 concurrency control checks failed"
@@ -381,22 +381,24 @@ General invariants:
 - Each workflow must end in exactly one final status
 - Top-level count fields are derived from `workflow_results`, not computed independently
 - `total_workflows` must equal the length of `workflow_results`
-- `validated_workflows` must equal the count of `workflow_results` items with `status: validated`
-- `failed_workflows` must equal the count of items with `status: failed` plus items with `status: generation_failed`
-- `validated_workflows + failed_workflows` plus `advisory_only` count must equal `total_workflows`
+- `passed_workflows` must equal the count of `workflow_results` items with `status: validated` plus items with `status: advisory_only`
+- `failed_workflows` must equal the count of items with `status: failed` plus items with `status: invalid` plus items with `status: generation_failed`
+- `passed_workflows + failed_workflows` must equal `total_workflows`
 - If `status: error`, `workflow_results` must be empty and all workflow count fields must be `0`
 
 Allowed final states:
 
-- `validated`: workflow generated and passed all required validation checks (S1, S2, S4, E2, E3)
+- `validated`: workflow generated and passed all required validation checks (S1, S2, S4, E2, E3) with no advisory warnings
 - `advisory_only`: workflow generated, passed all required checks, but has advisory warnings (S3, E1, E4)
-- `failed`: workflow generated but failed one or more required validation checks
-- `generation_failed`: workflow could not be generated at all
+- `invalid`: workflow file exists on disk but is unusable — either empty or not valid YAML; the 8-rule validation was never reached
+- `failed`: workflow generated and is valid YAML but failed one or more required validation checks
+- `generation_failed`: workflow could not be generated at all (no file on disk)
 
 Per-state field rules:
 
 - `validated`: `output_path` must be non-null; `validation_failed` must be 0; `advisory_count` must be 0
 - `advisory_only`: `output_path` must be non-null; `validation_failed` must be 0; `advisory_count` must be greater than 0
+- `invalid`: `output_path` must be non-null; `validation_passed`, `validation_failed`, and `advisory_count` must all be 0
 - `failed`: `output_path` must be non-null; `validation_failed` must be greater than 0
 - `generation_failed`: `output_path` must be `null`; `validation_passed`, `validation_failed`, `advisory_count` must all be 0
 
@@ -406,6 +408,8 @@ Illegal combinations:
 - `status: validated` with `advisory_count > 0`
 - `status: advisory_only` with `advisory_count == 0`
 - `status: advisory_only` with `validation_failed > 0`
+- `status: invalid` with `output_path: null`
+- `status: invalid` with `validation_passed > 0` or `validation_failed > 0` or `advisory_count > 0`
 - `status: failed` with `validation_failed == 0`
 - `status: generation_failed` with non-null `output_path`
 - Any workflow appearing more than once in `workflow_results`
@@ -490,10 +494,10 @@ Gate-level `error_reason` values:
 
 Mapping rules:
 
-- If gha-create itself errors during generation, use `gha_create_error`
-- If generation completes but the output file is empty, use `empty_workflow_output`
-- If the generated file is not valid YAML, use `invalid_workflow_yaml`
-- If the file is valid YAML but fails required validation checks, use `validation_check_failed`
+- If gha-create itself errors during generation, use `gha_create_error` and set workflow status to `generation_failed`
+- If generation completes but the output file is empty, use `empty_workflow_output` and set workflow status to `invalid`
+- If the generated file is not valid YAML, use `invalid_workflow_yaml` and set workflow status to `invalid`
+- If the file is valid YAML but fails required validation checks, use `validation_check_failed` and set workflow status to `failed`
 
 ## Common Pitfalls
 
