@@ -1,0 +1,7 @@
+# Tracking `nexus-skills/main` during active development; prefer immutable tags or commit SHAs for releases.
+skills:
+  - name: gha-create
+    version: "0.1.0"
+    ref: "main"
+    source: https://github.com/PSDN-AI/nexus-skills
+    path: skills/gha-create
