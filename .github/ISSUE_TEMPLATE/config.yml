@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: nexus-skills
+    url: https://github.com/PSDN-AI/nexus-skills/issues
+    about: For issues with individual skills (gha-create, prd-decompose, spec-plan, etc.), file them in the nexus-skills repo.

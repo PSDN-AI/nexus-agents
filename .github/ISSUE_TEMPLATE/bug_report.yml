@@ -1,0 +1,52 @@
+name: Bug Report
+description: Report an issue with an agent definition or orchestration contract.
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Agent
+      description: Which agent is affected?
+      options:
+        - prd-planner
+        - gha-planner
+        - Other / not agent-specific
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened and what did you expect?
+      placeholder: "When I invoked gha-planner with repo_path pointing to a Go project, the scan step..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Prompt or steps used to trigger the issue.
+      placeholder: |
+        1. Read AGENTS.md and agents/gha-planner/AGENT.md
+        2. Run the workflow with repo_path: ./my-go-project
+        3. Observe the scan.yaml output
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should have happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Any other relevant information (AI runtime used, skill versions, etc.).
+    validations:
+      required: false
