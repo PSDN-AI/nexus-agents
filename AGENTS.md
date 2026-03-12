@@ -2,13 +2,39 @@
 
 Shared authoring and operating conventions for all agents in `nexus-agents`.
 
-This file is the repo-level contract. Individual agents still define their own workflow in `agents/{agent-name}/AGENT.md`, but reusable rules should live here first.
+This file is the repo-level contract and the single source of truth for repository guidelines. Individual agents still define their own workflow in `agents/{agent-name}/AGENT.md`, but reusable rules should live here first.
+
+## What This Repo Is
+
+`nexus-agents` is a **knowledge-only** repository — no scripts, no builds, no tests, no CI. There is nothing to compile or run. Each agent is a set of markdown and YAML files consumed by an AI runtime.
+
+Agents orchestrate multi-step workflows by chaining skills from the companion repo [nexus-skills](https://github.com/PSDN-AI/nexus-skills). Skills are atomic, single-purpose units; agents compose them into pipelines.
+
+## Repository Structure
+
+```
+AGENTS.md            # Repo-level conventions shared by all agents (this file)
+CLAUDE.md            # Claude Code entry point — imports this file
+agents/{agent-name}/
+  ├── README.md        # Human-facing usage and invocation guide
+  ├── AGENT.md         # Orchestration contract: pipeline steps, I/O contracts, constraints, error handling
+  └── config.yaml      # Skill dependencies with version, ref, and source location
+reference.md           # Curated reference material (AI agent engineering practices)
+```
 
 ## Why This File Exists
 
 - Keep cross-agent conventions in one place instead of duplicating them in every agent
 - Make the repository legible to an AI runtime before it opens any specific agent
 - Separate stable architectural rules from agent-specific workflow steps
+
+## Agent Anatomy
+
+Each agent directory must contain:
+
+- **README.md**: human-facing usage and invocation guidance, including example prompts for invoking the agent from Claude Code
+- **AGENT.md**: the primary orchestration contract. Uses YAML frontmatter (name, description, license, metadata) followed by a detailed step-by-step workflow with explicit gates, I/O contracts, constitutional constraints, and error handling
+- **config.yaml**: declares skill dependencies. Each skill entry has `name`, `version`, `ref`, `source`, and `path`. During development, `ref` tracks `main`; for releases, pin to an immutable tag or commit SHA
 
 ## Core Best Practices
 
@@ -17,12 +43,14 @@ This file is the repo-level contract. Individual agents still define their own w
 - An agent coordinates skills. It does not replace them.
 - Reusable logic belongs in `nexus-skills`; sequencing, gates, and aggregation belong here.
 - Agents must not fabricate outputs that should be produced by a referenced skill.
+- Agents invoke only skills listed in their `config.yaml` — no inline task fabrication.
 
 ### 2. Make Inputs, Outputs, And Gates Explicit
 
 - Every agent must define accepted inputs, produced outputs, and stop conditions.
 - Validation gates should happen before expensive or irreversible steps.
 - If partial success is allowed, state exactly what can fail without aborting the whole run.
+- The input PRD is always read-only; all output goes to a separate directory.
 
 ### 3. Keep Shared Invariants Centralized
 
@@ -56,13 +84,20 @@ This file is the repo-level contract. Individual agents still define their own w
 - Any machine-readable `reason` field should use a fixed documented enum, not ad hoc strings.
 - If an agent emits per-unit statuses, define them as an explicit state machine with illegal combinations called out.
 
-## Required Agent Shape
+## Key Conventions
 
-Each agent directory must contain:
+- Agents **never contain executable code** — no scripts, no GitHub Actions.
+- Skills come from `nexus-skills` repo; agents from this repo. Keep the boundary clean.
+- `reference.md` at the root is a curated collection of external references — append new entries under the appropriate topic heading following the existing format.
+- **All repository content (markdown, YAML, comments) must be written in English.** The user may communicate in other languages, but all file content committed to the repo must be English only.
 
-- `README.md`: human-facing usage and invocation guidance
-- `AGENT.md`: orchestration contract with steps, gates, constraints, and error handling
-- `config.yaml`: skill dependencies, versions, refs, and source locations
+## Adding a New Agent
+
+1. Create `agents/{agent-name}/` with `README.md`, `AGENT.md`, and `config.yaml`.
+2. Follow the conventions in this file and the agent anatomy described above.
+3. AGENT.md must include: YAML frontmatter, step-by-step workflow with numbered gates, I/O contract table, constitutional constraints, error handling section, and common pitfalls.
+4. config.yaml must list all skill dependencies with `ref` fields.
+5. Update the "Available Agents" table in the root `README.md`.
 
 ## Authoring Checklist
 
