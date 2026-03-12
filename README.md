@@ -11,14 +11,14 @@ This repository defines a shared `AGENTS.md` contract plus per-agent **knowledge
 - **`AGENT.md`** — orchestration instructions: pipeline steps, input/output contracts, constraints, and error handling.
 - **`config.yaml`** — declares which skills the agent depends on, with version metadata, refs, and source locations.
 
-Agents do not contain scripts or GitHub Actions. They are consumed by an AI runtime that reads the AGENT.md and follows its workflow, invoking the referenced skills at each step.
+Agent packages themselves do not contain executable code. They are consumed by an AI runtime that reads the AGENT.md and follows its workflow, invoking the referenced skills at each step. (The `.github/` directory holds repo-level governance workflows, not agent logic.)
 
 ## Available Agents
 
 | Agent | Description | Skills Used |
 |-------|-------------|-------------|
-| [prd-planner](agents/prd-planner/) | Decomposes a PRD into domain specs, then generates task graphs per domain | `prd-decompose`, `spec-plan` |
-| [gha-planner](agents/gha-planner/) | Scans a repo's tech stack and generates hardened GitHub Actions workflows | `gha-create` |
+| <nobr>[prd-planner](agents/prd-planner/)</nobr> | Decomposes a PRD into domain specs, then generates task graphs per domain | `prd-decompose`, `spec-plan` |
+| <nobr>[gha-planner](agents/gha-planner/)</nobr> | Scans a repo's tech stack and generates hardened GitHub Actions workflows | `gha-create` |
 
 ## Cross-Repo Relationship
 
@@ -26,8 +26,9 @@ Agents do not contain scripts or GitHub Actions. They are consumed by an AI runt
 nexus-skills (atomic capabilities)
   |- prd-decompose
   |- spec-plan
+  |- gha-create
+  |- repo-audit
   |- agent-launcher
-  |- ...
 
 nexus-agents (orchestration)
   |- prd-planner  -->  chains prd-decompose + spec-plan
