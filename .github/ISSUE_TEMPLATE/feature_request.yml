@@ -1,0 +1,41 @@
+name: Feature Request
+description: Suggest a new agent, a new pipeline step, or an improvement to an existing agent.
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      description: What area does this affect?
+      options:
+        - New agent
+        - prd-planner
+        - gha-planner
+        - Shared conventions (AGENTS.md)
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem does this solve or what gap does it fill?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Solution
+      description: Describe the change you would like to see.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any other approaches you thought about.
+    validations:
+      required: false

@@ -1,0 +1,21 @@
+# Label rules for actions/labeler — matches PR changed files to labels.
+
+"agent:prd-planner":
+  - changed-files:
+      - any-glob-to-any-file: "agents/prd-planner/**"
+
+"agent:gha-planner":
+  - changed-files:
+      - any-glob-to-any-file: "agents/gha-planner/**"
+
+meta:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "AGENTS.md"
+          - "README.md"
+          - "CLAUDE.md"
+          - "reference.md"
+
+skill-dep:
+  - changed-files:
+      - any-glob-to-any-file: "agents/*/config.yaml"
