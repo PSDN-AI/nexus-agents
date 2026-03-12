@@ -18,6 +18,7 @@ Agents do not contain scripts or GitHub Actions. They are consumed by an AI runt
 | Agent | Description | Skills Used |
 |-------|-------------|-------------|
 | [prd-planner](agents/prd-planner/) | Decomposes a PRD into domain specs, then generates task graphs per domain | `prd-decompose`, `spec-plan` |
+| [gha-planner](agents/gha-planner/) | Scans a repo's tech stack and generates hardened GitHub Actions workflows | `gha-create` |
 
 ## Cross-Repo Relationship
 
@@ -30,6 +31,7 @@ nexus-skills (atomic capabilities)
 
 nexus-agents (orchestration)
   |- prd-planner  -->  chains prd-decompose + spec-plan
+  |- gha-planner  -->  wraps gha-create
   |- ...
 ```
 
