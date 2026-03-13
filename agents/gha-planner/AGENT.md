@@ -204,7 +204,7 @@ Target Repo path
     - E3: Concurrency control present
     - E4: Matrix `fail-fast: true` (advisory)
   - [ ] Record per-rule pass/fail/advisory status
-  - [ ] If all required checks pass (`validated` or `advisory_only`): create `.github/workflows/` if it does not exist, then write the workflow to `.github/workflows/{workflow_filename}`
+  - [ ] If all required checks pass (`validated` or `advisory_only`): re-check that `.github/workflows/{workflow_filename}` does not already exist. If it now exists (race with an external change), reclassify as `skipped_conflict` instead of writing. Otherwise, create `.github/workflows/` if it does not exist, then write the workflow file
   - [ ] If validation fails (`invalid` or `failed`): do NOT write the file to disk
 - [ ] A workflow passes validation if all required checks (S1, S2, S4, E2, E3) pass
 - [ ] Advisory failures (S3, E1, E4) produce warnings but do not fail the workflow
