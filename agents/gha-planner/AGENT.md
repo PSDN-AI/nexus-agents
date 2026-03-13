@@ -204,7 +204,7 @@ Target Repo path
     - E3: Concurrency control present
     - E4: Matrix `fail-fast: true` (advisory)
   - [ ] Record per-rule pass/fail/advisory status
-  - [ ] If all required checks pass (`validated` or `advisory_only`): re-check that `.github/workflows/{workflow_filename}` does not already exist. If it now exists (race with an external change), reclassify as `skipped_conflict` instead of writing. Otherwise, create `.github/workflows/` if it does not exist, then write the workflow file. If the directory creation or file write fails (permissions, disk error, etc.), reclassify as `write_failed`
+  - [ ] If all required checks pass (`validated` or `advisory_only`): re-check that `.github/workflows/{workflow_filename}` does not already exist. If it now exists (race with an external change), reclassify as `write_conflict` instead of writing. Otherwise, create `.github/workflows/` if it does not exist, then write the workflow file. If the directory creation or file write fails (permissions, disk error, etc.), reclassify as `write_failed`
   - [ ] If validation fails (`invalid` or `failed`): do NOT write the file to disk
 - [ ] A workflow passes validation if all required checks (S1, S2, S4, E2, E3) pass
 - [ ] Advisory failures (S3, E1, E4) produce warnings but do not fail the workflow
@@ -219,7 +219,7 @@ Target Repo path
 - [ ] List advisory warnings per workflow
 - [ ] If a human-readable recap is included, it must be derived from the machine-readable summary and must not contradict it
 
-**Result classification**: If `failed_workflows` is greater than 0, the run is a partial failure. If `failed_workflows` is 0 but `advisory_warnings` is greater than 0, the run is a partial success.
+**Result classification**: Derive `status` from the canonical rules in `Summary Output`. In brief: `partial_failure` if `failed_workflows > 0`; `partial_success` if `failed_workflows == 0` but `advisory_warnings > 0` or `skipped_workflows > 0`; `success` only when all three are `0`.
 
 ## Input / Output Contract
 
@@ -246,9 +246,9 @@ The agent must produce a final machine-readable summary object with these top-le
 
 - `status`: one of `success`, `partial_success`, `partial_failure`, `error`
 - `total_workflows`: number of workflows planned
-- `generated_workflows`: number of workflows where generation was attempted and produced content (includes `validated`, `advisory_only`, `invalid`, `failed`, and `write_failed`; excludes `generation_failed` and `skipped_conflict`)
+- `generated_workflows`: number of workflows where generation was attempted and produced content (includes `validated`, `advisory_only`, `invalid`, `failed`, `write_failed`, and `write_conflict`; excludes `generation_failed` and `skipped_conflict`)
 - `passed_workflows`: number of workflows that passed all required validation checks (includes `validated` and `advisory_only`)
-- `failed_workflows`: number of workflows that failed generation, required validation, or filesystem write (includes `failed`, `invalid`, `generation_failed`, and `write_failed`)
+- `failed_workflows`: number of workflows that failed generation, required validation, or filesystem write (includes `failed`, `invalid`, `generation_failed`, `write_failed`, and `write_conflict`)
 - `skipped_workflows`: number of workflows skipped due to filename conflict with an existing workflow
 - `advisory_warnings`: total advisory warning count across all workflows
 - `tech_stack`: condensed summary of detected languages, frameworks, and package managers
@@ -278,7 +278,7 @@ Each item in `workflow_results` must contain:
 
 - `workflow_id`: short identifier (e.g., `ci`, `cd`, `docker-build`)
 - `workflow_filename`: output filename
-- `status`: one of `validated`, `advisory_only`, `invalid`, `failed`, `generation_failed`, `write_failed`, `skipped_conflict`
+- `status`: one of `validated`, `advisory_only`, `invalid`, `failed`, `generation_failed`, `write_failed`, `write_conflict`, `skipped_conflict`
 - `description`: what the workflow does
 - `output_path`: path to the written file (`.github/workflows/{filename}`), or `null` if the workflow was not written to disk
 - `validation_passed`: number of required checks passed
@@ -286,7 +286,7 @@ Each item in `workflow_results` must contain:
 - `advisory_count`: number of advisory warnings
 - `notes`: short explanation of the final classification
 
-`failed_workflow_details` must contain one entry for every workflow whose final status is not `validated` or `advisory_only`. This includes `failed`, `invalid`, `generation_failed`, `write_failed`, and `skipped_conflict` workflows. Each entry must contain:
+`failed_workflow_details` must contain one entry for every workflow whose final status is not `validated` or `advisory_only`. This includes `failed`, `invalid`, `generation_failed`, `write_failed`, `write_conflict`, and `skipped_conflict` workflows. Each entry must contain:
 
 - `workflow_id`: short identifier
 - `stage`: one of `generate`, `validate`
@@ -383,9 +383,9 @@ General invariants:
 - Top-level count fields are derived from `workflow_results`, not computed independently
 - `total_workflows` must equal the length of `workflow_results`
 - `passed_workflows` must equal the count of `workflow_results` items with `status: validated` plus items with `status: advisory_only`
-- `failed_workflows` must equal the count of items with `status: failed` plus items with `status: invalid` plus items with `status: generation_failed` plus items with `status: write_failed`
+- `failed_workflows` must equal the count of items with `status: failed` plus items with `status: invalid` plus items with `status: generation_failed` plus items with `status: write_failed` plus items with `status: write_conflict`
 - `skipped_workflows` must equal the count of items with `status: skipped_conflict`
-- `generated_workflows` must equal `total_workflows` minus the count of items with `status: generation_failed` minus `skipped_workflows` (note: `write_failed` workflows were generated, so they are included in `generated_workflows`)
+- `generated_workflows` must equal `total_workflows` minus the count of items with `status: generation_failed` minus `skipped_workflows` (note: `write_failed` and `write_conflict` workflows were generated, so they are included in `generated_workflows`)
 - `passed_workflows + failed_workflows + skipped_workflows` must equal `total_workflows`
 - If `status: error`, `workflow_results` must be empty and all workflow count fields must be `0`
 
@@ -397,7 +397,8 @@ Allowed final states:
 - `failed`: workflow generated and is valid YAML but failed one or more required validation checks; not written to disk
 - `generation_failed`: workflow could not be generated at all; not written to disk
 - `write_failed`: workflow passed validation but could not be written to disk (permissions, disk error, etc.); not written to disk
-- `skipped_conflict`: a file with the same name already exists in `.github/workflows/`; generation was not attempted
+- `write_conflict`: workflow was generated and passed validation, but a file with the same name appeared in `.github/workflows/` between planning and write time (race condition); not written to disk
+- `skipped_conflict`: a file with the same name already exists in `.github/workflows/` at plan time; generation was not attempted
 
 Per-state field rules:
 
@@ -407,6 +408,7 @@ Per-state field rules:
 - `failed`: `output_path` must be `null`; `validation_failed` must be greater than 0
 - `generation_failed`: `output_path` must be `null`; `validation_passed`, `validation_failed`, `advisory_count` must all be 0
 - `write_failed`: `output_path` must be `null`; `validation_failed` must be 0 (validation passed, but the write did not)
+- `write_conflict`: `output_path` must be `null`; `validation_failed` must be 0 (validation passed, but a file appeared before write); `validation_passed` and `advisory_count` reflect the actual validation results
 - `skipped_conflict`: `output_path` must be `null`; `validation_passed`, `validation_failed`, `advisory_count` must all be 0
 
 Illegal combinations:
@@ -424,6 +426,8 @@ Illegal combinations:
 - `status: generation_failed` with non-null `output_path`
 - `status: write_failed` with non-null `output_path`
 - `status: write_failed` with `validation_failed > 0`
+- `status: write_conflict` with non-null `output_path`
+- `status: write_conflict` with `validation_failed > 0`
 - `status: skipped_conflict` with non-null `output_path`
 - `status: skipped_conflict` with `validation_passed > 0` or `validation_failed > 0` or `advisory_count > 0`
 - Any workflow appearing more than once in `workflow_results`
@@ -432,7 +436,7 @@ Illegal combinations:
 ### Failure Artifact Policy
 
 - Only workflows with status `validated` or `advisory_only` are written to `.github/workflows/`
-- Workflows that fail generation or validation are reported in the summary only — they are not written to disk
+- All other outcomes (`failed`, `invalid`, `generation_failed`, `write_failed`, `write_conflict`, `skipped_conflict`) are reported in the summary only — they are not written to disk
 - The agent must not fabricate cleanup markers or replacement files to hide an upstream failure
 
 ## Constitutional Constraints
@@ -506,12 +510,12 @@ Mapping rules:
 - If the generated content is not valid YAML, use reason `invalid_workflow_yaml`, stage `validate`, workflow status `invalid`
 - If the content is valid YAML but fails required validation checks, use reason `validation_check_failed`, stage `validate`, workflow status `failed`
 - If the planned filename conflicts with an existing file at plan time, use reason `workflow_name_conflict`, stage `generate`, workflow status `skipped_conflict`
-- If a conflict is discovered at write time (Step 6 recheck), use reason `workflow_name_conflict`, stage `validate`, workflow status `skipped_conflict`
+- If a conflict is discovered at write time (Step 6 recheck), use reason `workflow_name_conflict`, stage `validate`, workflow status `write_conflict`
 - If directory creation or file write fails after validation, use reason `workflow_write_error`, stage `validate`, workflow status `write_failed`
 
 ## Common Pitfalls
 
-- **Overwriting existing workflows**: The agent must never overwrite files that already exist in `.github/workflows/`. Conflicts are detected during planning and result in `skipped_conflict`.
+- **Overwriting existing workflows**: The agent must never overwrite files that already exist in `.github/workflows/`. Conflicts detected at plan time result in `skipped_conflict`; conflicts discovered at write time (race condition) result in `write_conflict`.
 - **Writing failed workflows to disk**: Only `validated` and `advisory_only` workflows are written to `.github/workflows/`. Failed, invalid, and generation-failed workflows are reported in the summary only.
 - **Generating workflows without gha-create rules**: Every workflow must follow all 8 rules (S1-S4, E1-E4). Do not produce naive workflows.
 - **Confusing advisory vs required checks**: S3, E1, E4 are advisory. S1, S2, S4, E2, E3 are required. A workflow with only advisory failures is `advisory_only`, not `failed`.
