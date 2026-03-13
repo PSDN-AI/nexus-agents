@@ -24,33 +24,13 @@ Required:
 
 - `repo_path`: path to the target repository root
 
-Optional:
-
-- `out`: output directory, defaults to `gha-output/`
-
-`out` must point to a new directory path or an already-empty directory. Do not reuse a non-empty directory from a previous run.
-
 ## Outputs
 
-The agent writes a structured directory like:
+The agent writes validated workflow files directly to `.github/workflows/` in the target repository. No metadata files are produced — scan results, the plan, and validation details are held in agent context and reported in the final summary.
 
-```text
-gha-output/
-  |- scan.yaml
-  |- plan.yaml
-  |- workflows/
-  |    |- ci.yml
-  |    |- cd.yml
-  |    |- docker-build.yml
-  |    |- security.yml
-  |- validation/
-       |- ci.yml.result
-       |- cd.yml.result
-       |- docker-build.yml.result
-       |- security.yml.result
-```
+Only workflows that pass all required validation checks are written to disk. Workflows that fail validation, conflict with existing filenames, or overlap in purpose with an existing workflow (even under a different filename) are reported in the summary but not written.
 
-It also produces a machine-readable final summary with stable top-level fields such as `status`, `total_workflows`, `generated_workflows`, `passed_workflows`, `failed_workflows`, `advisory_warnings`, and per-workflow detail arrays. Its `reason` fields use fixed enums, so downstream consumers should branch on those codes instead of parsing free-form prose.
+The agent also produces a machine-readable final summary with stable top-level fields such as `status`, `total_workflows`, `generated_workflows`, `passed_workflows`, `failed_workflows`, `skipped_workflows`, `advisory_warnings`, and per-workflow detail arrays. Its `reason` fields use fixed enums, so downstream consumers should branch on those codes instead of parsing free-form prose.
 
 ## Calling It From Claude Code
 
@@ -75,7 +55,6 @@ Read:
 
 Then run the workflow with:
 - `repo_path`: path/to/target-repo
-- `out`: gha-output
 
 Use the local `../nexus-skills` checkout as the source of truth for skill instructions. Follow the agent contract exactly. Do not skip validation gates. Produce the final summary after all workflows are generated and validated.
 ```
@@ -93,7 +72,6 @@ Read:
 
 Then run the workflow with:
 - `repo_path`: path/to/target-repo
-- `out`: gha-output
 
 Follow the agent contract exactly. Do not skip validation gates. Produce the final summary after all workflows are generated and validated.
 ```
@@ -122,7 +100,7 @@ Follow the agent contract exactly. Do not skip validation gates. Produce the fin
 3. Ask Claude to read `AGENTS.md` first, then this agent's `README.md`, `AGENT.md`, and `config.yaml`.
 4. Provide `repo_path` pointing to the target repository.
 5. Let Claude execute the steps defined in `AGENT.md`.
-6. Review the generated `gha-output/` structure and the final summary.
+6. Review the generated workflows in `.github/workflows/` and the final summary.
 
 ## Notes For Development
 
@@ -130,7 +108,7 @@ Follow the agent contract exactly. Do not skip validation gates. Produce the fin
 - For release or reproducible CI runs, switch `ref` to an immutable tag or commit SHA.
 - Required validation checks: S1 (SHA pinning), S2 (permissions), S4 (injection prevention), E2 (caching), E3 (concurrency).
 - Advisory checks: S3 (OIDC), E1 (path filtering), E4 (matrix optimization). These produce warnings but do not fail workflows.
-- If existing workflows are detected in the target repo, they are noted in the report but never modified.
+- If existing workflows are detected in the target repo, they are classified by intent and noted in the report but never modified. Planned workflows that overlap in purpose with an existing workflow are skipped.
 - Prefer consuming the structured summary fields directly. Human-readable recap text, if present, is secondary.
 
 ## When Not To Use This

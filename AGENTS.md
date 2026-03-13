@@ -50,7 +50,7 @@ Each agent directory must contain:
 - Every agent must define accepted inputs, produced outputs, and stop conditions.
 - Validation gates should happen before expensive or irreversible steps.
 - If partial success is allowed, state exactly what can fail without aborting the whole run.
-- The input PRD is always read-only; all output goes to a separate directory.
+- The input PRD is always read-only. Output goes to a separate directory by default; agents that write into the target repository (e.g., to a well-known path like `.github/workflows/`) must declare this in their `AGENT.md`, must never modify or delete existing files, and must use conflict detection to avoid overwrites.
 
 ### 3. Keep Shared Invariants Centralized
 
