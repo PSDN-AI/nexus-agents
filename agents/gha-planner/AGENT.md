@@ -143,7 +143,7 @@ Target Repo path
   - **Languages**: file extensions (`.ts`, `.js`, `.py`, `.go`, `.rs`, `.java`, `.rb`, `.cs`, etc.)
   - **Package managers**: `package.json`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `requirements.txt`, `Pipfile`, `pyproject.toml`, `go.mod`, `Cargo.toml`, `Gemfile`, `pom.xml`, `build.gradle`, `*.csproj`
   - **Frameworks**: config files (`next.config.*`, `nuxt.config.*`, `angular.json`, `vite.config.*`, `Dockerfile`, `docker-compose.yml`, `terraform/`, `.tf` files, `serverless.yml`, `k8s/`, `helm/`)
-  - **Existing workflows**: `.github/workflows/` contents
+  - **Existing workflows**: `.github/workflows/` contents — for each existing workflow, read its YAML and classify it by intent into the closest `workflow_id` category (`ci`, `cd`, `docker-build`, `release`, `security`, or `null` if unclassifiable). Classification signals include: actions used (e.g., `actions/setup-node` + test steps → `ci`; `docker/build-push-action` → `docker-build`), trigger events (e.g., `release` → `release`), deployment-related actions/steps → `cd`, and security scanner actions → `security`
   - **Deployment targets**: cloud config files (`samconfig.toml`, `cdk.json`, `app.yaml`, `vercel.json`, `netlify.toml`, `fly.toml`)
   - **Test runners**: config files or package.json scripts (jest, vitest, pytest, go test, cargo test, etc.)
   - **Linters/formatters**: `.eslintrc*`, `.prettierrc*`, `ruff.toml`, `golangci-lint.yml`, `.rubocop.yml`, etc.
@@ -173,13 +173,14 @@ Target Repo path
   - `tech_context`: relevant tech stack details to pass to gha-create
 - [ ] If existing workflows are detected in `.github/workflows/`, record them in the plan under `existing_workflows` for reference, but do not modify them
 - [ ] For each planned workflow, check if `.github/workflows/{workflow_filename}` already exists — if so, mark that workflow as `skipped_conflict` in the plan
+- [ ] For each remaining planned workflow (not already `skipped_conflict`), check whether any existing workflow was classified under the same `workflow_id` during scanning. If a semantic overlap is found, mark that planned workflow as `skipped_overlap` in the plan and record which existing workflow matched (filename and classified intent). This prevents generating a duplicate `ci.yml` when the repo already has a `build.yml` that serves the same purpose
 - [ ] Retain the plan in agent context for use in subsequent steps
 
 **Gate**: If planning produces zero workflows (nothing to generate), STOP with error code `no_workflows_planned`.
 
 ### Step 5: GENERATE
 
-- [ ] For each planned workflow that is not marked `skipped_conflict`:
+- [ ] For each planned workflow that is not marked `skipped_conflict` or `skipped_overlap`:
   - [ ] Invoke the `gha-create` skill in knowledge-driven mode
   - [ ] Provide the tech context from the plan so gha-create generates an appropriate workflow
   - [ ] The agent passes the gha-create SKILL.md rules as context and requests a workflow following all 8 rules (S1-S4, E1-E4)
@@ -215,7 +216,7 @@ Target Repo path
 - [ ] Count: total planned workflows, generated workflows, passed workflows, failed workflows, skipped workflows
 - [ ] Build a machine-readable final summary using the field names and ordering defined in `Summary Output`
 - [ ] List any workflows that failed generation or validation with error details
-- [ ] List any workflows skipped due to filename conflicts
+- [ ] List any workflows skipped due to filename conflicts or semantic overlap with existing workflows
 - [ ] List advisory warnings per workflow
 - [ ] If a human-readable recap is included, it must be derived from the machine-readable summary and must not contradict it
 
@@ -246,10 +247,10 @@ The agent must produce a final machine-readable summary object with these top-le
 
 - `status`: one of `success`, `partial_success`, `partial_failure`, `error`
 - `total_workflows`: number of workflows planned
-- `generated_workflows`: number of workflows where generation was attempted and produced content (includes `validated`, `advisory_only`, `invalid`, `failed`, `write_failed`, and `write_conflict`; excludes `generation_failed` and `skipped_conflict`)
+- `generated_workflows`: number of workflows where generation was attempted and produced content (includes `validated`, `advisory_only`, `invalid`, `failed`, `write_failed`, and `write_conflict`; excludes `generation_failed`, `skipped_conflict`, and `skipped_overlap`)
 - `passed_workflows`: number of workflows that passed all required validation checks (includes `validated` and `advisory_only`)
 - `failed_workflows`: number of workflows that failed generation, required validation, or filesystem write (includes `failed`, `invalid`, `generation_failed`, `write_failed`, and `write_conflict`)
-- `skipped_workflows`: number of workflows skipped due to filename conflict with an existing workflow
+- `skipped_workflows`: number of workflows skipped due to filename conflict or semantic overlap with an existing workflow
 - `advisory_warnings`: total advisory warning count across all workflows
 - `tech_stack`: condensed summary of detected languages, frameworks, and package managers
 - `existing_workflows_found`: number of existing workflows detected in the target repo
@@ -257,13 +258,14 @@ The agent must produce a final machine-readable summary object with these top-le
 - `error_reason`: `null` unless `status` is `error`
 - `error_message`: `null` unless `status` is `error`
 - `workflow_results`: array of per-workflow result records, sorted by `workflow_id`
-- `failed_workflow_details`: array of per-workflow failure records, sorted by `workflow_id`
+- `failed_workflow_details`: array of per-workflow failure records (statuses: `failed`, `invalid`, `generation_failed`, `write_failed`, `write_conflict`), sorted by `workflow_id`
+- `skipped_workflow_details`: array of per-workflow skip records (statuses: `skipped_conflict`, `skipped_overlap`), sorted by `workflow_id`
 
 The `status` field is derived as follows (evaluated in order, first match wins):
 
 - `error`: a hard gate failed before the generation loop
 - `partial_failure`: `failed_workflows` is greater than 0
-- `partial_success`: `failed_workflows` is 0 but `advisory_warnings` is greater than 0, OR `failed_workflows` is 0 and `skipped_workflows` is greater than 0 (some or all workflows were skipped due to conflicts)
+- `partial_success`: `failed_workflows` is 0 but `advisory_warnings` is greater than 0, OR `failed_workflows` is 0 and `skipped_workflows` is greater than 0 (some or all workflows were skipped due to conflicts or semantic overlap)
 - `success`: `failed_workflows` is 0 and `advisory_warnings` is 0 and `skipped_workflows` is 0
 
 Top-level `status` must be derived from the finalized `workflow_results` state machine below when the generation loop is reached. If a hard gate fails before generation begins, emit `status: error`, set `workflow_results: []`, set all workflow count fields to `0`, and populate `error_stage`, `error_reason`, and `error_message`.
@@ -278,7 +280,7 @@ Each item in `workflow_results` must contain:
 
 - `workflow_id`: short identifier (e.g., `ci`, `cd`, `docker-build`)
 - `workflow_filename`: output filename
-- `status`: one of `validated`, `advisory_only`, `invalid`, `failed`, `generation_failed`, `write_failed`, `write_conflict`, `skipped_conflict`
+- `status`: one of `validated`, `advisory_only`, `invalid`, `failed`, `generation_failed`, `write_failed`, `write_conflict`, `skipped_conflict`, `skipped_overlap`
 - `description`: what the workflow does
 - `output_path`: path to the written file (`.github/workflows/{filename}`), or `null` if the workflow was not written to disk
 - `validation_passed`: number of required checks passed
@@ -286,24 +288,31 @@ Each item in `workflow_results` must contain:
 - `advisory_count`: number of advisory warnings
 - `notes`: short explanation of the final classification
 
-`failed_workflow_details` must contain one entry for every workflow whose final status is not `validated` or `advisory_only`. This includes `failed`, `invalid`, `generation_failed`, `write_failed`, `write_conflict`, and `skipped_conflict` workflows. Each entry must contain:
+`failed_workflow_details` must contain one entry for every workflow whose final status is `failed`, `invalid`, `generation_failed`, `write_failed`, or `write_conflict`. Each entry must contain:
 
 - `workflow_id`: short identifier
-- `stage`: one of `generate`, `validate`
+- `stage`: one of `generate`, `validate`, `write`
 - `reason`: one of the failure reason codes defined in `Reason Code Registry`
 - `message`: concise human-readable explanation
 
-`workflow_results` and `failed_workflow_details` must both be sorted by `workflow_id` for deterministic output.
+`skipped_workflow_details` must contain one entry for every workflow whose final status is `skipped_conflict` or `skipped_overlap`. Each entry must contain:
+
+- `workflow_id`: short identifier
+- `stage`: `plan`
+- `reason`: one of `workflow_name_conflict`, `workflow_purpose_overlap`
+- `message`: concise human-readable explanation
+
+`workflow_results`, `failed_workflow_details`, and `skipped_workflow_details` must all be sorted by `workflow_id` for deterministic output.
 
 Illustrative shape:
 
 ```yaml
 status: partial_failure
 total_workflows: 5
-generated_workflows: 4
-passed_workflows: 3
+generated_workflows: 3
+passed_workflows: 2
 failed_workflows: 1
-skipped_workflows: 1
+skipped_workflows: 2
 advisory_warnings: 2
 tech_stack:
   languages: [typescript, python]
@@ -311,7 +320,7 @@ tech_stack:
   frameworks: [next.js]
   has_docker: true
   deployment_targets: [vercel]
-existing_workflows_found: 1
+existing_workflows_found: 2
 error_stage: null
 error_reason: null
 error_message: null
@@ -336,13 +345,13 @@ workflow_results:
     notes: "Existing ci.yml detected; skipped to avoid overwrite"
   - workflow_id: docker-build
     workflow_filename: docker-build.yml
-    status: validated
+    status: skipped_overlap
     description: "Build and push Docker image"
-    output_path: .github/workflows/docker-build.yml
-    validation_passed: 5
+    output_path: null
+    validation_passed: 0
     validation_failed: 0
     advisory_count: 0
-    notes: "All checks passed"
+    notes: "Existing build-image.yml classified as docker-build; skipped to avoid duplicate"
   - workflow_id: release
     workflow_filename: release.yml
     status: advisory_only
@@ -366,10 +375,15 @@ failed_workflow_details:
     stage: validate
     reason: validation_check_failed
     message: "S1 SHA pinning and E3 concurrency control checks failed"
+skipped_workflow_details:
   - workflow_id: ci
-    stage: generate
+    stage: plan
     reason: workflow_name_conflict
     message: "ci.yml already exists in .github/workflows/"
+  - workflow_id: docker-build
+    stage: plan
+    reason: workflow_purpose_overlap
+    message: "Existing build-image.yml classified as docker-build; skipped to avoid duplicate"
 ```
 
 ### Workflow Result State Machine
@@ -384,7 +398,7 @@ General invariants:
 - `total_workflows` must equal the length of `workflow_results`
 - `passed_workflows` must equal the count of `workflow_results` items with `status: validated` plus items with `status: advisory_only`
 - `failed_workflows` must equal the count of items with `status: failed` plus items with `status: invalid` plus items with `status: generation_failed` plus items with `status: write_failed` plus items with `status: write_conflict`
-- `skipped_workflows` must equal the count of items with `status: skipped_conflict`
+- `skipped_workflows` must equal the count of items with `status: skipped_conflict` plus items with `status: skipped_overlap`
 - `generated_workflows` must equal `total_workflows` minus the count of items with `status: generation_failed` minus `skipped_workflows` (note: `write_failed` and `write_conflict` workflows were generated, so they are included in `generated_workflows`)
 - `passed_workflows + failed_workflows + skipped_workflows` must equal `total_workflows`
 - If `status: error`, `workflow_results` must be empty and all workflow count fields must be `0`
@@ -399,6 +413,7 @@ Allowed final states:
 - `write_failed`: workflow passed validation but could not be written to disk (permissions, disk error, etc.); not written to disk
 - `write_conflict`: workflow was generated and passed validation, but a file with the same name appeared in `.github/workflows/` between planning and write time (race condition); not written to disk
 - `skipped_conflict`: a file with the same name already exists in `.github/workflows/` at plan time; generation was not attempted
+- `skipped_overlap`: an existing workflow with a different filename was classified as serving the same purpose at plan time; generation was not attempted
 
 Per-state field rules:
 
@@ -410,6 +425,7 @@ Per-state field rules:
 - `write_failed`: `output_path` must be `null`; `validation_failed` must be 0 (validation passed, but the write did not)
 - `write_conflict`: `output_path` must be `null`; `validation_failed` must be 0 (validation passed, but a file appeared before write); `validation_passed` and `advisory_count` reflect the actual validation results
 - `skipped_conflict`: `output_path` must be `null`; `validation_passed`, `validation_failed`, `advisory_count` must all be 0
+- `skipped_overlap`: `output_path` must be `null`; `validation_passed`, `validation_failed`, `advisory_count` must all be 0
 
 Illegal combinations:
 
@@ -430,13 +446,15 @@ Illegal combinations:
 - `status: write_conflict` with `validation_failed > 0`
 - `status: skipped_conflict` with non-null `output_path`
 - `status: skipped_conflict` with `validation_passed > 0` or `validation_failed > 0` or `advisory_count > 0`
+- `status: skipped_overlap` with non-null `output_path`
+- `status: skipped_overlap` with `validation_passed > 0` or `validation_failed > 0` or `advisory_count > 0`
 - Any workflow appearing more than once in `workflow_results`
 - Any mismatch between top-level counts and the derived counts from `workflow_results`
 
 ### Failure Artifact Policy
 
 - Only workflows with status `validated` or `advisory_only` are written to `.github/workflows/`
-- All other outcomes (`failed`, `invalid`, `generation_failed`, `write_failed`, `write_conflict`, `skipped_conflict`) are reported in the summary only — they are not written to disk
+- All other outcomes (`failed`, `invalid`, `generation_failed`, `write_failed`, `write_conflict`, `skipped_conflict`, `skipped_overlap`) are reported in the summary only — they are not written to disk
 - The agent must not fabricate cleanup markers or replacement files to hide an upstream failure
 
 ## Constitutional Constraints
@@ -446,9 +464,9 @@ Illegal combinations:
 3. **Fail-safe iteration**: If gha-create fails for one workflow, log and continue. Never abort the entire pipeline for a single workflow failure.
 4. **No fabrication**: Do not generate workflow content outside of gha-create. The agent orchestrates; it does not author workflows. All workflow YAML must be produced through the gha-create skill's rules and patterns.
 5. **Deterministic output**: Given the same repository state and the same resolved skill refs, the output structure should be identical.
-6. **No implicit overwrite**: If a planned workflow filename conflicts with an existing file in `.github/workflows/`, skip it with `skipped_conflict` — never overwrite.
+6. **No implicit overwrite or duplication**: If a planned workflow filename conflicts with an existing file in `.github/workflows/`, skip it with `skipped_conflict`. If an existing workflow with a different filename is classified as serving the same purpose, skip it with `skipped_overlap`. Never overwrite, and never generate a duplicate of an already-covered purpose.
 7. **Preserve evidence**: Report all outcomes (passed, failed, skipped) in the summary; do not suppress failures to make the run look clean.
-8. **Do not modify existing workflows**: If the target repo already has files in `.github/workflows/`, record them for reference. Conflicting filenames result in `skipped_conflict`; existing files are never altered or deleted.
+8. **Do not modify existing workflows**: If the target repo already has files in `.github/workflows/`, record them for reference and classify them by intent. Conflicting filenames result in `skipped_conflict`; semantic overlaps result in `skipped_overlap`; existing files are never altered or deleted.
 
 ## Error Handling
 
@@ -500,18 +518,27 @@ Gate-level `error_reason` values:
 - `empty_workflow_output`: generation completed but produced empty content
 - `invalid_workflow_yaml`: generated content is not valid YAML
 - `validation_check_failed`: workflow failed one or more required validation checks (S1, S2, S4, E2, E3)
-- `workflow_name_conflict`: a file with the same name already exists in `.github/workflows/`
+- `workflow_name_conflict`: a file with the same name appeared in `.github/workflows/` between planning and write time (race condition)
 - `workflow_write_error`: validated workflow could not be written to disk (permissions, disk full, path error)
 
-Mapping rules:
+`skipped_workflow_details.reason` values:
+
+- `workflow_name_conflict`: a file with the same name already exists in `.github/workflows/` at plan time
+- `workflow_purpose_overlap`: an existing workflow with a different filename was classified as serving the same purpose
+
+Mapping rules (`failed_workflow_details`):
 
 - If gha-create itself errors during generation, use reason `gha_create_error`, stage `generate`, workflow status `generation_failed`
 - If generation completes but the output is empty, use reason `empty_workflow_output`, stage `validate`, workflow status `invalid`
 - If the generated content is not valid YAML, use reason `invalid_workflow_yaml`, stage `validate`, workflow status `invalid`
 - If the content is valid YAML but fails required validation checks, use reason `validation_check_failed`, stage `validate`, workflow status `failed`
-- If the planned filename conflicts with an existing file at plan time, use reason `workflow_name_conflict`, stage `generate`, workflow status `skipped_conflict`
-- If a conflict is discovered at write time (Step 6 recheck), use reason `workflow_name_conflict`, stage `validate`, workflow status `write_conflict`
-- If directory creation or file write fails after validation, use reason `workflow_write_error`, stage `validate`, workflow status `write_failed`
+- If a conflict is discovered at write time (Step 6 recheck), use reason `workflow_name_conflict`, stage `write`, workflow status `write_conflict`
+- If directory creation or file write fails after validation, use reason `workflow_write_error`, stage `write`, workflow status `write_failed`
+
+Mapping rules (`skipped_workflow_details`):
+
+- If the planned filename conflicts with an existing file at plan time, use reason `workflow_name_conflict`, stage `plan`, workflow status `skipped_conflict`
+- If an existing workflow with a different filename is classified under the same `workflow_id` at plan time, use reason `workflow_purpose_overlap`, stage `plan`, workflow status `skipped_overlap`
 
 ## Common Pitfalls
 
@@ -519,7 +546,7 @@ Mapping rules:
 - **Writing failed workflows to disk**: Only `validated` and `advisory_only` workflows are written to `.github/workflows/`. Failed, invalid, and generation-failed workflows are reported in the summary only.
 - **Generating workflows without gha-create rules**: Every workflow must follow all 8 rules (S1-S4, E1-E4). Do not produce naive workflows.
 - **Confusing advisory vs required checks**: S3, E1, E4 are advisory. S1, S2, S4, E2, E3 are required. A workflow with only advisory failures is `advisory_only`, not `failed`.
-- **Ignoring existing workflows**: If the target repo already has workflows, acknowledge them in the report. Do not generate duplicates for the same purpose without noting the potential overlap.
+- **Ignoring existing workflows**: If the target repo already has workflows, classify them by intent during scanning. Do not generate a workflow when an existing one (even with a different filename) already serves the same purpose — mark it `skipped_overlap`. A repo with `build.yml` that runs lint+test should not also get a new `ci.yml`.
 - **Planning workflows for undetected tech**: Do not plan a Docker workflow if no Dockerfile is found. Stick to what the scan detects.
 - **Treating an empty repo as scannable**: If no languages are detected, stop at the scan gate.
 - **SHA pinning with stale SHAs**: The gha-create skill's SKILL.md and its SHA_LOOKUP.md reference provide current SHAs. Always consult them rather than using outdated values.

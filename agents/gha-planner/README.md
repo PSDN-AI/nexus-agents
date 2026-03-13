@@ -28,7 +28,7 @@ Required:
 
 The agent writes validated workflow files directly to `.github/workflows/` in the target repository. No metadata files are produced — scan results, the plan, and validation details are held in agent context and reported in the final summary.
 
-Only workflows that pass all required validation checks are written to disk. Workflows that fail validation or conflict with existing filenames are reported in the summary but not written.
+Only workflows that pass all required validation checks are written to disk. Workflows that fail validation, conflict with existing filenames, or overlap in purpose with an existing workflow (even under a different filename) are reported in the summary but not written.
 
 The agent also produces a machine-readable final summary with stable top-level fields such as `status`, `total_workflows`, `generated_workflows`, `passed_workflows`, `failed_workflows`, `skipped_workflows`, `advisory_warnings`, and per-workflow detail arrays. Its `reason` fields use fixed enums, so downstream consumers should branch on those codes instead of parsing free-form prose.
 
@@ -108,7 +108,7 @@ Follow the agent contract exactly. Do not skip validation gates. Produce the fin
 - For release or reproducible CI runs, switch `ref` to an immutable tag or commit SHA.
 - Required validation checks: S1 (SHA pinning), S2 (permissions), S4 (injection prevention), E2 (caching), E3 (concurrency).
 - Advisory checks: S3 (OIDC), E1 (path filtering), E4 (matrix optimization). These produce warnings but do not fail workflows.
-- If existing workflows are detected in the target repo, they are noted in the report but never modified.
+- If existing workflows are detected in the target repo, they are classified by intent and noted in the report but never modified. Planned workflows that overlap in purpose with an existing workflow are skipped.
 - Prefer consuming the structured summary fields directly. Human-readable recap text, if present, is secondary.
 
 ## When Not To Use This
