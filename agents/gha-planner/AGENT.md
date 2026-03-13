@@ -286,7 +286,7 @@ Each item in `workflow_results` must contain:
 - `advisory_count`: number of advisory warnings
 - `notes`: short explanation of the final classification
 
-`failed_workflow_details` must contain objects with:
+`failed_workflow_details` must contain one entry for every workflow whose final status is not `validated` or `advisory_only`. This includes `failed`, `invalid`, `generation_failed`, `write_failed`, and `skipped_conflict` workflows. Each entry must contain:
 
 - `workflow_id`: short identifier
 - `stage`: one of `generate`, `validate`
@@ -366,6 +366,10 @@ failed_workflow_details:
     stage: validate
     reason: validation_check_failed
     message: "S1 SHA pinning and E3 concurrency control checks failed"
+  - workflow_id: ci
+    stage: generate
+    reason: workflow_name_conflict
+    message: "ci.yml already exists in .github/workflows/"
 ```
 
 ### Workflow Result State Machine
