@@ -259,14 +259,14 @@ The agent must produce a final machine-readable summary object with these top-le
 - `workflow_results`: array of per-workflow result records, sorted by `workflow_id`
 - `failed_workflow_details`: array of per-workflow failure records, sorted by `workflow_id`
 
-The `status` field is derived as follows:
+The `status` field is derived as follows (evaluated in order, first match wins):
 
-- `error`: a hard gate failed before the generation loop
+- `error`: a hard gate failed before the generation loop, OR `skipped_workflows` equals `total_workflows` (every planned workflow was skipped, nothing was generated or validated)
 - `partial_failure`: `failed_workflows` is greater than 0
-- `partial_success`: `failed_workflows` is 0 but `advisory_warnings` is greater than 0
-- `success`: `failed_workflows` is 0 and `advisory_warnings` is 0
+- `partial_success`: `failed_workflows` is 0 but `advisory_warnings` is greater than 0, OR `failed_workflows` is 0 and `skipped_workflows` is greater than 0 (some workflows were produced but others were skipped)
+- `success`: `failed_workflows` is 0 and `advisory_warnings` is 0 and `skipped_workflows` is 0
 
-Top-level `status` must be derived from the finalized `workflow_results` state machine below when the generation loop is reached. Skipped workflows do not affect the `status` derivation. If a hard gate fails before generation begins, emit `status: error`, set `workflow_results: []`, set all workflow count fields to `0`, and populate `error_stage`, `error_reason`, and `error_message`.
+Top-level `status` must be derived from the finalized `workflow_results` state machine below when the generation loop is reached. If a hard gate fails before generation begins, emit `status: error`, set `workflow_results: []`, set all workflow count fields to `0`, and populate `error_stage`, `error_reason`, and `error_message`. When `skipped_workflows` equals `total_workflows`, use `error_reason: all_workflows_skipped` and `error_stage: generate`.
 
 When `status` is `error`, populate:
 
@@ -484,6 +484,7 @@ Gate-level `error_reason` values:
 - `skill_definition_unavailable`: gha-create SKILL.md cannot be resolved
 - `empty_scan_results`: scanning detected no languages or package managers
 - `no_workflows_planned`: planning produced zero workflows to generate
+- `all_workflows_skipped`: every planned workflow was skipped due to filename conflicts; nothing was generated or validated
 
 `failed_workflow_details.reason` values:
 
