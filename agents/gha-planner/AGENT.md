@@ -270,7 +270,7 @@ Top-level `status` must be derived from the finalized `workflow_results` state m
 
 When `status` is `error`, populate:
 
-- `error_stage`: one of `receive`, `resolve`, `scan`, `plan`
+- `error_stage`: one of `receive`, `resolve`, `scan`, `plan`, `generate`
 - `error_reason`: one of the gate-level reason codes defined in `Reason Code Registry`
 - `error_message`: concise human-readable explanation
 
