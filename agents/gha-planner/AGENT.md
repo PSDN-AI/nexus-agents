@@ -127,7 +127,7 @@ Target Repo path
 - [ ] Verify `repo_path` looks like a repository root (contains at least some source files or a recognizable project structure)
 - [ ] Verify that `.github/workflows/` under `repo_path` either already exists as a directory or can be created (i.e., `.github/` is a directory or does not yet exist)
 
-**Gate**: If `repo_path` is missing, does not exist, or is not a directory, STOP with error.
+**Gate**: If `repo_path` is missing, does not exist, or is not a directory; or if `.github/workflows/` cannot be created (e.g., `.github` exists as a file), STOP with error.
 
 ### Step 2: RESOLVE
 
@@ -246,9 +246,9 @@ The agent must produce a final machine-readable summary object with these top-le
 
 - `status`: one of `success`, `partial_success`, `partial_failure`, `error`
 - `total_workflows`: number of workflows planned
-- `generated_workflows`: number of workflows where generation was attempted and produced content (includes `validated`, `advisory_only`, `invalid`, and `failed`; excludes `generation_failed` and `skipped_conflict`)
+- `generated_workflows`: number of workflows where generation was attempted and produced content (includes `validated`, `advisory_only`, `invalid`, `failed`, and `write_failed`; excludes `generation_failed` and `skipped_conflict`)
 - `passed_workflows`: number of workflows that passed all required validation checks (includes `validated` and `advisory_only`)
-- `failed_workflows`: number of workflows that failed generation or required validation
+- `failed_workflows`: number of workflows that failed generation, required validation, or filesystem write (includes `failed`, `invalid`, `generation_failed`, and `write_failed`)
 - `skipped_workflows`: number of workflows skipped due to filename conflict with an existing workflow
 - `advisory_warnings`: total advisory warning count across all workflows
 - `tech_stack`: condensed summary of detected languages, frameworks, and package managers
@@ -261,16 +261,16 @@ The agent must produce a final machine-readable summary object with these top-le
 
 The `status` field is derived as follows (evaluated in order, first match wins):
 
-- `error`: a hard gate failed before the generation loop, OR `skipped_workflows` equals `total_workflows` (every planned workflow was skipped, nothing was generated or validated)
+- `error`: a hard gate failed before the generation loop
 - `partial_failure`: `failed_workflows` is greater than 0
-- `partial_success`: `failed_workflows` is 0 but `advisory_warnings` is greater than 0, OR `failed_workflows` is 0 and `skipped_workflows` is greater than 0 (some workflows were produced but others were skipped)
+- `partial_success`: `failed_workflows` is 0 but `advisory_warnings` is greater than 0, OR `failed_workflows` is 0 and `skipped_workflows` is greater than 0 (some or all workflows were skipped due to conflicts)
 - `success`: `failed_workflows` is 0 and `advisory_warnings` is 0 and `skipped_workflows` is 0
 
-Top-level `status` must be derived from the finalized `workflow_results` state machine below when the generation loop is reached. If a hard gate fails before generation begins, emit `status: error`, set `workflow_results: []`, set all workflow count fields to `0`, and populate `error_stage`, `error_reason`, and `error_message`. When `skipped_workflows` equals `total_workflows`, use `error_reason: all_workflows_skipped` and `error_stage: generate`.
+Top-level `status` must be derived from the finalized `workflow_results` state machine below when the generation loop is reached. If a hard gate fails before generation begins, emit `status: error`, set `workflow_results: []`, set all workflow count fields to `0`, and populate `error_stage`, `error_reason`, and `error_message`.
 
 When `status` is `error`, populate:
 
-- `error_stage`: one of `receive`, `resolve`, `scan`, `plan`, `generate`
+- `error_stage`: one of `receive`, `resolve`, `scan`, `plan`
 - `error_reason`: one of the gate-level reason codes defined in `Reason Code Registry`
 - `error_message`: concise human-readable explanation
 
@@ -450,9 +450,9 @@ Illegal combinations:
 
 ### Gate 1: Input Validation (Step 1)
 
-Triggers when `repo_path` is missing, non-existent, or not a directory. The agent stops immediately and reports the input error.
+Triggers when `repo_path` is missing, non-existent, or not a directory; or when the `.github/workflows/` path cannot be created. The agent stops immediately and reports the input error.
 
-Use one of these `error_reason` values: `missing_repo_path`, `repo_path_not_found`, `repo_path_not_directory`.
+Use one of these `error_reason` values: `missing_repo_path`, `repo_path_not_found`, `repo_path_not_directory`, `workflow_path_blocked`.
 
 ### Gate 2: Skill Resolution (Step 2)
 
@@ -483,12 +483,12 @@ Gate-level `error_reason` values:
 - `missing_repo_path`: `repo_path` was not provided
 - `repo_path_not_found`: `repo_path` does not exist
 - `repo_path_not_directory`: `repo_path` exists but is not a directory
+- `workflow_path_blocked`: `.github/workflows/` cannot be created (e.g., `.github` exists as a file)
 - `skill_config_missing`: `config.yaml` is missing or unreadable
 - `missing_skill_ref`: gha-create entry is missing a `ref`
 - `skill_definition_unavailable`: gha-create SKILL.md cannot be resolved
 - `empty_scan_results`: scanning detected no languages or package managers
 - `no_workflows_planned`: planning produced zero workflows to generate
-- `all_workflows_skipped`: every planned workflow was skipped due to filename conflicts; nothing was generated or validated
 
 `failed_workflow_details.reason` values:
 
@@ -505,7 +505,8 @@ Mapping rules:
 - If generation completes but the output is empty, use reason `empty_workflow_output`, stage `validate`, workflow status `invalid`
 - If the generated content is not valid YAML, use reason `invalid_workflow_yaml`, stage `validate`, workflow status `invalid`
 - If the content is valid YAML but fails required validation checks, use reason `validation_check_failed`, stage `validate`, workflow status `failed`
-- If the planned filename conflicts with an existing file, use reason `workflow_name_conflict`, stage `generate`, workflow status `skipped_conflict`
+- If the planned filename conflicts with an existing file at plan time, use reason `workflow_name_conflict`, stage `generate`, workflow status `skipped_conflict`
+- If a conflict is discovered at write time (Step 6 recheck), use reason `workflow_name_conflict`, stage `validate`, workflow status `skipped_conflict`
 - If directory creation or file write fails after validation, use reason `workflow_write_error`, stage `validate`, workflow status `write_failed`
 
 ## Common Pitfalls
